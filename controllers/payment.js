@@ -24,7 +24,7 @@ async function handleRevenueCatWebhook(req, res) {
                 return res.status(400).json({ message: 'Missing transferred user IDs' });
             }
 
-            const oldUser = await User.findOne({ where: { id: fromId } });
+            const oldUser = await User.findOne({ where: { userId: fromId } });
             if (!oldUser) return res.status(404).json({ message: 'Old user not found' });
 
             await User.update(
@@ -43,7 +43,7 @@ async function handleRevenueCatWebhook(req, res) {
             return res.status(200).json({ message: 'Transfer completed' });
         }
 
-        const user = await User.findOne({ where: { id: userId } });
+        const user = await User.findOne({ where: { userId } });
         if (!user) return res.status(404).json({ message: 'User not found' });
 
         if (['INITIAL_PURCHASE', 'RENEWAL', 'PRODUCT_CHANGE'].includes(type)) {

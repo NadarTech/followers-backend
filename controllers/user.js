@@ -236,12 +236,6 @@ fetchQueue.process(async (job) => {
             // 4. verified hesap olan takipçilerim
             const verifiedFollowers = followers.filter(f => f.isVerified);
 
-            let profileViewers = [];
-            if (followers.length > 0) {
-                const shuffled = followers.sort(() => 0.5 - Math.random());
-                profileViewers = shuffled.slice(0, Math.min(8, shuffled.length));
-            }
-
 
             await User.increment("requestCount", { by: 1, where: { userId } });
 
@@ -249,6 +243,17 @@ fetchQueue.process(async (job) => {
             const user = await User.findOne({ where: { userId } });
 
             if (user.requestCount >= 2) {
+                let profileViewers = [];
+                if (followers.length > 0) {
+                    const shuffled = followers.sort(() => 0.5 - Math.random());
+
+                    let randomLimit = Math.floor(Math.random() * (16 - 4 + 1)) + 4;
+
+                    randomLimit = Math.min(randomLimit, shuffled.length);
+
+                    profileViewers = shuffled.slice(0, randomLimit);
+                    console.log(`🎲 seçilen limit=${randomLimit}, takipçi=${followers.length}, slice=${profileViewers.length}`);
+                }
                 await User.update(
                     {
                         requestCount: 0,
@@ -265,7 +270,7 @@ fetchQueue.process(async (job) => {
             }
         }
     } catch (err) {
-        await User.update({ requestStatus: false }, { where: { userId } })
+        await User.update({ requestStatus: false, requestCount: 0, }, { where: { userId } })
         console.error("❌ Hata:", err.response?.data || err.message);
     }
 });
@@ -287,7 +292,7 @@ async function getInstagramUsers(req, res) {
         } else if (type == 'profileViewers') {
             list = await getProfileViewers(req.userId);
         }
-        console.log(list);
+        //console.log(list);
 
         return res.status(200).json(list);
     } catch (error) {
@@ -354,13 +359,14 @@ async function getVerifiedFollowers(userId) {
 }
 
 async function getProfileViewers(userId) {
+    const user = await User.findOne({ where: { userId } });
+    console.log(user.profileViewersCount);
+
     const viewers = await InstagramUser.findAll({
         where: { ownerId: userId, sourceType: "followers" },
         order: Sequelize.literal("RAND()"),
-        limit: 8,
-        attributes: ["userId", "username", "profilePhoto"]
+        limit: user.profileViewersCount,
     });
-
     return viewers;
 
 }

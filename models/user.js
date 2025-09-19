@@ -56,6 +56,11 @@ module.exports = db.define("users", {
         allowNull: false,
         defaultValue: 0,
     },
+    profileViewersCount: {
+        type: Sequelize.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+    },
     requestCount: {
         type: Sequelize.INTEGER,
         allowNull: false,

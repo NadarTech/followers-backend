@@ -3,6 +3,7 @@ const InstagramUser = require('../models/instagram_user');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
 const Queue = require("bull");
+const Sequelize = require('sequelize');
 
 async function getUser(req, res) {
     try {
@@ -235,6 +236,13 @@ fetchQueue.process(async (job) => {
             // 4. verified hesap olan takipçilerim
             const verifiedFollowers = followers.filter(f => f.isVerified);
 
+            let profileViewers = [];
+            if (followers.length > 0) {
+                const shuffled = followers.sort(() => 0.5 - Math.random());
+                profileViewers = shuffled.slice(0, Math.min(8, shuffled.length));
+            }
+
+
             await User.increment("requestCount", { by: 1, where: { userId } });
 
             // Kullanıcının güncel requestCount değerini çek
@@ -249,6 +257,7 @@ fetchQueue.process(async (job) => {
                         notFollowingMeCount: notFollowingMe.length,
                         privateFollowersCount: privateFollowers.length,
                         verifiedFollowersCount: verifiedFollowers.length,
+                        profileViewersCount: profileViewers.length,
                     },
                     { where: { userId } }
                 );
@@ -275,6 +284,8 @@ async function getInstagramUsers(req, res) {
             list = await getPrivateFollowers(req.userId);
         } else if (type == 'verifiedFollowers') {
             list = await getVerifiedFollowers(req.userId);
+        } else if (type == 'profileViewers') {
+            list = await getProfileViewers(req.userId);
         }
         console.log(list);
 
@@ -340,6 +351,18 @@ async function getVerifiedFollowers(userId) {
     });
 
     return verifiedFollowers;
+}
+
+async function getProfileViewers(userId) {
+    const viewers = await InstagramUser.findAll({
+        where: { ownerId: userId, sourceType: "followers" },
+        order: Sequelize.literal("RAND()"),
+        limit: 8,
+        attributes: ["userId", "username", "profilePhoto"]
+    });
+
+    return viewers;
+
 }
 
 

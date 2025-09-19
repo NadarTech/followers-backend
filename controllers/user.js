@@ -3,7 +3,7 @@ const InstagramUser = require('../models/instagram_user');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
 const Queue = require("bull");
-const Sequelize = require('sequelize');
+const { Sequelize } = require("sequelize");
 
 async function getUser(req, res) {
     try {

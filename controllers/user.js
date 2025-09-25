@@ -155,9 +155,19 @@ function delay(ms) {
 }
 
 async function fetchPage(sessionId, userId, type, maxId = null) {
+
+    // User-Agent rotation
+    const userAgents = [
+        "Instagram 200.0.0.29.121 Android",
+        "Instagram 201.0.0.30.118 Android",
+        "Instagram 199.0.0.28.125 Android"
+    ];
+    const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
+
+
     const url = `https://i.instagram.com/api/v1/friendships/${userId}/${type}/`;
     const headers = {
-        "User-Agent": "Instagram 200.0.0.29.121 Android",
+        "User-Agent": randomUA,
         "Cookie": `sessionid=${sessionId}; ds_user_id=${userId};`,
     };
 

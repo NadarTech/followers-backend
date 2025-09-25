@@ -201,7 +201,7 @@ fetchQueue.process(async (job) => {
         if (data.next_max_id != null) {
             console.log(`➡️ ${type}: sıradaki sayfa kuyruğa alınıyor...`);
 
-            const waitMs = 1000 + Math.floor(Math.random() * 4000);
+            const waitMs = 3000 + Math.floor(Math.random() * 4000);
             console.log(`⏳ ${waitMs / 1000} saniye bekleniyor...`);
             await delay(waitMs);
 

@@ -232,6 +232,7 @@ fetchQueue.process(async (job) => {
 
         const pageInfo = data?.data?.user?.edge_follow?.page_info
             || data?.data?.user?.edge_followed_by?.page_info;
+        console.log("data:", data);
         console.log("page_info:", pageInfo);
 
         if (pageInfo?.has_next_page && pageInfo?.end_cursor) {

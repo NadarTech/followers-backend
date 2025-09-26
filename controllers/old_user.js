@@ -4,7 +4,6 @@ const jwt = require('jsonwebtoken');
 const axios = require('axios');
 const Queue = require("bull");
 const { Sequelize } = require("sequelize");
-const { axiosGetWithProxy } = require("../utils/proxyClient");
 
 async function getUser(req, res) {
     try {
@@ -100,8 +99,6 @@ async function refreshUser(req, res) {
 async function createUser(req, res) {
     const { sessionId, userId } = req.body;
     try {
-        console.log(req.body);
-
         if (!sessionId || !userId) {
             return res.status(400).json({ error: "Account problem" });
         }
@@ -123,7 +120,6 @@ async function createUser(req, res) {
 
         const response2 = await axios.get(url, { headers });
         const response = response2.data.user;
-        console.log(response);
 
         const username = response.username;
         const profilePhoto = response.profile_pic_url;
@@ -133,8 +129,6 @@ async function createUser(req, res) {
         const accessToken = jwt.sign({ userId }, process.env.ACCESS_TOKEN);
         return res.status(200).json({ accessToken });
     } catch (error) {
-        console.log(error);
-
         await User.update({ status: false }, { where: { userId } });
         return res.status(500).json({ message: 'Unknown error' });
     }
@@ -154,14 +148,13 @@ async function fetchUserData(req, res) {
 
 
 const fetchQueue = new Queue("fetchQueue", process.env.REDIS_URL || "redis://127.0.0.1:6379");
-//const fetchQueue = new Queue("fetchQueue", "redis://127.0.0.1:6379");
 
 // ------------------- HELPERS -------------------
 function delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchPage(sessionId, userId, type, endCursor) {
+async function fetchPage(sessionId, userId, type, maxId = null) {
 
     // User-Agent rotation
     const userAgents = [
@@ -171,54 +164,38 @@ async function fetchPage(sessionId, userId, type, endCursor) {
     ];
     const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
 
-    const queryHash = type === "followers"
-        ? "c76146de99bb02f6415203be841dd25a"
-        : "d04b0a864b4b54837c0d870b0e77e076";
 
-    const variables = {
-        id: userId.toString(),
-        first: 500
-    };
-
-    if (endCursor) variables.after = endCursor;
-
-    console.log('endCursor ', endCursor);
-    console.log('variables ', variables);
-
-    const url = `https://www.instagram.com/graphql/query/?query_hash=${queryHash}&variables=${encodeURIComponent(JSON.stringify(variables))}`;
-
+    const url = `https://i.instagram.com/api/v1/friendships/${userId}/${type}/`;
     const headers = {
         "User-Agent": randomUA,
-        "Cookie": `sessionid=${sessionId}; ds_user_id=${userId};`
+        "Cookie": `sessionid=${sessionId}; ds_user_id=${userId};`,
     };
 
-    const res = await axiosGetWithProxy(url, { headers }, userId);
+    const fullUrl = maxId ? `${url}?max_id=${maxId}` : url;
+    const res = await axios.get(fullUrl, { headers });
     return res.data;
 }
 
 
 // ------------------- WORKER -------------------
 fetchQueue.process(async (job) => {
-    const { sessionId, userId, type, endCursor } = job.data;
+    const { sessionId, userId, type, maxId } = job.data;
     //console.log(`📥 Job başladı: ${type} | userId=${userId} | maxId=${maxId || "ilk sayfa"}`);
 
     try {
-        const data = await fetchPage(sessionId, userId, type, endCursor);
+        const data = await fetchPage(sessionId, userId, type, maxId);
         //console.log(`✅ ${type}: ${data.users?.length || 0} kişi geldi`);
 
-        const edges = type === "followers"
-            ? data.data.user.edge_followed_by.edges
-            : data.data.user.edge_follow.edges;
 
-        if (edges && edges.length > 0) {
+        if (data.users && data.users.length > 0) {
             // DB'ye ekle
-            const rows = edges.map(({ node }) => ({
-                userId: node.id,
+            const rows = data.users.map((u) => ({
+                userId: u.pk_id,
                 ownerId: userId,
-                username: node.username,
-                profilePhoto: node.profile_pic_url,
-                isPrivate: node.is_private,
-                isVerified: node.is_verified,
+                username: u.username,
+                profilePhoto: u.profile_pic_url,
+                isPrivate: u.is_private,
+                isVerified: u.is_verified,
                 sourceType: type,
             }));
 
@@ -229,20 +206,17 @@ fetchQueue.process(async (job) => {
                 console.error("❌ DB Hatası:", dbErr.message);
             }
         }
+        console.log(`bak gelen değere: ${data.next_max_id}`);
 
-        const pageInfo = data?.data?.user?.edge_follow?.page_info
-            || data?.data?.user?.edge_followed_by?.page_info;
-        console.log("page_info:", pageInfo);
-
-        if (pageInfo?.has_next_page && pageInfo?.end_cursor) {
+        if (data.next_max_id != null) {
             console.log(`➡️ ${type}: sıradaki sayfa kuyruğa alınıyor...`);
-            const endCursor = pageInfo.end_cursor;
-            const waitMs = 1000 + Math.floor(Math.random() * 2000);
+
+            const waitMs = 3000 + Math.floor(Math.random() * 4000);
             console.log(`⏳ ${waitMs / 1000} saniye bekleniyor...`);
             await delay(waitMs);
 
             await fetchQueue.add(
-                { sessionId, userId, type, endCursor },
+                { sessionId, userId, type, maxId: data.next_max_id },
                 { removeOnComplete: true }
             );
         } else {
@@ -306,7 +280,7 @@ fetchQueue.process(async (job) => {
             }
         }
     } catch (err) {
-        await User.update({ requestStatus: false, requestCount: 0, status: false, }, { where: { userId } })
+        await User.update({ requestStatus: false, requestCount: 0, }, { where: { userId } })
         console.error("❌ Hata:", err.response?.data || err.message);
     }
 });

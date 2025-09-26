@@ -237,9 +237,9 @@ fetchQueue.process(async (job) => {
         if (pageInfo?.has_next_page && pageInfo?.end_cursor) {
             console.log(`➡️ ${type}: sıradaki sayfa kuyruğa alınıyor...`);
             const endCursor = pageInfo.end_cursor;
-            const waitMs = 1000 + Math.floor(Math.random() * 2000);
-            console.log(`⏳ ${waitMs / 1000} saniye bekleniyor...`);
-            await delay(waitMs);
+            //const waitMs = 1000 + Math.floor(Math.random() * 2000);
+            //console.log(`⏳ ${waitMs / 1000} saniye bekleniyor...`);
+            //await delay(waitMs);
 
             await fetchQueue.add(
                 { sessionId, userId, type, endCursor },

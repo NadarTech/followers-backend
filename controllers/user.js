@@ -165,9 +165,7 @@ async function fetchPage(sessionId, userId, type, endCursor) {
 
     // User-Agent rotation
     const userAgents = [
-        "Instagram 200.0.0.29.121 Android",
-        "Instagram 201.0.0.30.118 Android",
-        "Instagram 199.0.0.28.125 Android"
+        "Instagram 293.0.0.36.101 Android"
     ];
     const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
 

@@ -18,7 +18,7 @@ const state = proxyList.map(url => ({
 }));
 
 const limiters = proxyList.map(() => new Bottleneck({
-    minTime: parseInt(process.env.PROXY_MIN_TIME || "6000", 10),
+    minTime: parseInt(process.env.PROXY_MIN_TIME || "3000", 10),
     maxConcurrent: parseInt(process.env.PROXY_MAX_CONCURRENCY || "2", 10),
 }));
 

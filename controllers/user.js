@@ -234,11 +234,10 @@ fetchQueue.process(30, async (job) => {
                 console.error("❌ DB Hatası:", dbErr.message);
             }
         }
-
-        const pageInfo = data?.data?.user?.edge_follow?.page_info
-            || data?.data?.user?.edge_followed_by?.page_info;
         console.log("data:", data);
         console.log("page_info:", pageInfo);
+        const pageInfo = data?.data?.user?.edge_follow?.page_info
+            || data?.data?.user?.edge_followed_by?.page_info;        
 
         if (pageInfo?.has_next_page && pageInfo?.end_cursor) {
             console.log(`➡️ ${type}: sıradaki sayfa kuyruğa alınıyor...`);

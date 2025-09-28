@@ -18,7 +18,7 @@ const state = proxyList.map(url => ({
 }));
 
 const limiters = proxyList.map(() => new Bottleneck({
-    minTime: parseInt(process.env.PROXY_MIN_TIME || "3000", 10),
+    minTime: parseInt(process.env.PROXY_MIN_TIME || "6000", 10),
     maxConcurrent: parseInt(process.env.PROXY_MAX_CONCURRENCY || "2", 10),
 }));
 
@@ -59,24 +59,36 @@ function markSuccess(idx) {
     state[idx].errorCount = 0;
 }
 
-async function axiosGetWithProxy(url, options, userId) {
+async function axiosGetWithProxy(url, options, userId, retries = 3) {
     if (!proxyList.length) return axios.get(url, options);
 
     const { idx, proxyUrl } = pickProxy(userId);
     const limiter = limiters[idx];
     const jitter = Math.floor(Math.random() * 800);
 
-    return limiter.schedule(() => new Promise(async (resolve, reject) => {
-        try {
-            const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined;
-            const resp = await axios.get(url, { ...options, httpsAgent: agent, timeout: 30000 });
-            markSuccess(idx);
-            setTimeout(() => resolve(resp), jitter);
-        } catch (err) {
-            markError(idx);
-            reject(err);
+    return limiter.schedule(async () => {
+        for (let attempt = 1; attempt <= retries; attempt++) {
+            try {
+                const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined;
+                const resp = await axios.get(url, {
+                    ...options,
+                    httpsAgent: agent,
+                    timeout: 45000, // biraz arttırdım
+                });
+                markSuccess(idx);
+                // küçük jitter
+                if (jitter) await new Promise(r => setTimeout(r, jitter));
+                return resp;
+            } catch (err) {
+                markError(idx);
+                console.warn(`❌ Proxy hata [${attempt}/${retries}] userId=${userId} proxy=${proxyUrl}: ${err.message}`);
+                if (attempt === retries) throw err;
+                // retry öncesi kısa bekleme
+                await new Promise(r => setTimeout(r, 2000 * attempt));
+            }
         }
-    }));
+    });
 }
+
 
 module.exports = { axiosGetWithProxy };

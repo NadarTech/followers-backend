@@ -147,8 +147,15 @@ async function fetchUserData(req, res) {
     const sessionId = user.sessionId;
 
     // Kuyruğa followers + following joblarını ekle
-    await fetchQueue.add({ sessionId, userId, type: "followers" });
-    await fetchQueue.add({ sessionId, userId, type: "following" });
+    await fetchQueue.add(
+        { sessionId, userId, type: "followers" },
+        { jobId: `${userId}-followers` } // aynı user için tekrar eklenmesin
+    );
+
+    await fetchQueue.add(
+        { sessionId, userId, type: "following" },
+        { jobId: `${userId}-following` }
+    );
     return res.json({ status: "queued", userId });
 }
 
@@ -196,9 +203,9 @@ async function fetchPage(sessionId, userId, type, endCursor) {
 
 
 // ------------------- WORKER -------------------
-fetchQueue.process(async (job) => {
+fetchQueue.process(30, async (job) => {
     const { sessionId, userId, type, endCursor } = job.data;
-    //console.log(`📥 Job başladı: ${type} | userId=${userId} | maxId=${maxId || "ilk sayfa"}`);
+    console.log(`📥 İş başladı: userId=${userId}, type=${type}`);
 
     try {
         const data = await fetchPage(sessionId, userId, type, endCursor);

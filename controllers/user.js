@@ -77,7 +77,7 @@ async function refreshUser(req, res) {
         const url = `https://i.instagram.com/api/v1/users/${req.userId}/info/`;
 
         const headers = {
-            "User-Agent": "Instagram 200.0.0.29.121 Android", // fake UA
+            "User-Agent": "Instagram 293.0.0.36.101 Android",
             "Cookie": `sessionid=${user.sessionId}; ds_user_id=${req.userId};`,
         };
 
@@ -117,7 +117,7 @@ async function createUser(req, res) {
         const url = `https://i.instagram.com/api/v1/users/${userId}/info/`;
 
         const headers = {
-            "User-Agent": "Instagram 200.0.0.29.121 Android", // fake UA
+            "User-Agent": "Instagram 293.0.0.36.101 Android",
             "Cookie": `sessionid=${sessionId}; ds_user_id=${userId};`,
         };
 
@@ -234,9 +234,9 @@ fetchQueue.process(30, async (job) => {
                 console.error("❌ DB Hatası:", dbErr.message);
             }
         }
-        console.log("data:", data);        
+        console.log("data:", data);
         const pageInfo = data?.data?.user?.edge_follow?.page_info
-        || data?.data?.user?.edge_followed_by?.page_info;        
+            || data?.data?.user?.edge_followed_by?.page_info;
         console.log("page_info:", pageInfo);
 
         if (pageInfo?.has_next_page && pageInfo?.end_cursor) {

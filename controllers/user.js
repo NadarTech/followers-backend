@@ -172,7 +172,11 @@ async function fetchPage(sessionId, userId, type, endCursor) {
 
     // User-Agent rotation
     const userAgents = [
-        "Instagram 293.0.0.36.101 Android"
+        "Instagram 293.0.0.36.101 Android",
+        "Instagram 289.0.0.77.109 Android",
+        "Instagram 250.0.0.21.109 iOS",
+        "Instagram 260.0.0.19.109 Android",
+        "Instagram 280.0.0.21.111 iOS"
     ];
     const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
 
@@ -203,7 +207,7 @@ async function fetchPage(sessionId, userId, type, endCursor) {
 
 
 // ------------------- WORKER -------------------
-fetchQueue.process(30, async (job) => {
+fetchQueue.process(5, async (job) => {
     const { sessionId, userId, type, endCursor } = job.data;
     console.log(`📥 İş başladı: userId=${userId}, type=${type}`);
 

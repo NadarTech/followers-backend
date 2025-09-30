@@ -13,7 +13,7 @@ async function getUser(req, res) {
     } catch (error) {
         await User.update({ status: false }, { where: { userId: req.userId } });
         console.error("❌ GetUser Hata:", error.response?.data || error.message);
-        return res.status(500).json({ message: 'Unknown error' });
+        return res.status(500).json({ message: error.response?.data || error.message });
     }
 }
 
@@ -30,7 +30,7 @@ async function deleteAccount(req, res) {
     } catch (error) {
         await User.update({ status: false }, { where: { userId: req.userId } });
         console.error("❌ deleteAccount Hata:", error.response?.data || error.message);
-        return res.status(500).json({ message: 'Unknown error' });
+        return res.status(500).json({ message: error.response?.data || error.message });
     }
 }
 
@@ -68,7 +68,7 @@ async function unfollow(req, res) {
     } catch (error) {
         console.error("❌ unfollow Hata:", error.response?.data || error.message);
         await User.update({ status: false }, { where: { userId: req.userId } });
-        return res.status(500).json({ message: 'Unknown error' });
+        return res.status(500).json({ message: error.response?.data || error.message });
     }
 }
 
@@ -94,7 +94,7 @@ async function refreshUser(req, res) {
     } catch (error) {
         console.error("❌ refreshUser Hata:", error.response?.data || error.message);
         await User.update({ status: false }, { where: { userId: req.userId } });
-        return res.status(500).json({ message: 'Unknown error' });
+        return res.status(500).json({ message: error.response?.data || error.message });
     }
 }
 
@@ -136,7 +136,7 @@ async function createUser(req, res) {
     } catch (error) {
         console.error("❌ createUser Hata:", error.response?.data || error.message);
         await User.update({ status: false }, { where: { userId } });
-        return res.status(500).json({ message: 'Unknown error' });
+        return res.status(500).json({ message: error.response?.data || error.message });
     }
 }
 
@@ -339,7 +339,7 @@ async function getInstagramUsers(req, res) {
     } catch (error) {
         await User.update({ status: false }, { where: { userId: req.userId } });
         console.error("❌ getInstagramUsers Hata:", error.response?.data || error.message);
-        return res.status(500).json({ message: 'Unknown error' });
+        return res.status(500).json({ message: error.response?.data || error.message });
     }
 }
 

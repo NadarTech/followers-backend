@@ -73,6 +73,7 @@ async function axiosGetWithProxy(url, options, userId, retries = 3) {
                 const resp = await axios.get(url, {
                     ...options,
                     httpsAgent: agent,
+                    proxy: false,
                     timeout: 45000, // biraz arttırdım
                 });
                 markSuccess(idx);

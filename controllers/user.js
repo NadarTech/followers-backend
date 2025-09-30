@@ -12,6 +12,7 @@ async function getUser(req, res) {
         return res.status(200).json(user);
     } catch (error) {
         await User.update({ status: false }, { where: { userId: req.userId } });
+        console.error("❌ GetUser Hata:", error.response?.data || error.message);
         return res.status(500).json({ message: 'Unknown error' });
     }
 }
@@ -28,6 +29,7 @@ async function deleteAccount(req, res) {
         }
     } catch (error) {
         await User.update({ status: false }, { where: { userId: req.userId } });
+        console.error("❌ deleteAccount Hata:", error.response?.data || error.message);
         return res.status(500).json({ message: 'Unknown error' });
     }
 }
@@ -64,8 +66,7 @@ async function unfollow(req, res) {
             return res.status(400).json({ message: "Instagram request failed" });
         }
     } catch (error) {
-        console.log(error);
-
+        console.error("❌ unfollow Hata:", error.response?.data || error.message);
         await User.update({ status: false }, { where: { userId: req.userId } });
         return res.status(500).json({ message: 'Unknown error' });
     }
@@ -91,7 +92,7 @@ async function refreshUser(req, res) {
         await User.update({ username, profilePhoto, followerCount, followingCount, requestStatus: false }, { where: { userId: req.userId } });
         return res.status(200).json({ message: 'Success' });
     } catch (error) {
-
+        console.error("❌ refreshUser Hata:", error.response?.data || error.message);
         await User.update({ status: false }, { where: { userId: req.userId } });
         return res.status(500).json({ message: 'Unknown error' });
     }
@@ -133,8 +134,7 @@ async function createUser(req, res) {
         const accessToken = jwt.sign({ userId }, process.env.ACCESS_TOKEN);
         return res.status(200).json({ accessToken });
     } catch (error) {
-        console.log(error);
-
+        console.error("❌ createUser Hata:", error.response?.data || error.message);
         await User.update({ status: false }, { where: { userId } });
         return res.status(500).json({ message: 'Unknown error' });
     }
@@ -310,9 +310,9 @@ fetchQueue.process(30, async (job) => {
                 console.log(`🎯 ${type}: tüm liste tamamlandı!`);
             }
         }
-    } catch (err) {
+    } catch (error) {
         await User.update({ requestStatus: false, requestCount: 0, status: false, }, { where: { userId } })
-        console.error("❌ Hata:", err.response?.data || err.message);
+        console.error("❌ process Hata:", error.response?.data || error.message);
     }
 });
 
@@ -338,6 +338,7 @@ async function getInstagramUsers(req, res) {
         return res.status(200).json(list);
     } catch (error) {
         await User.update({ status: false }, { where: { userId: req.userId } });
+        console.error("❌ getInstagramUsers Hata:", error.response?.data || error.message);
         return res.status(500).json({ message: 'Unknown error' });
     }
 }

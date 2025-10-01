@@ -17,10 +17,7 @@ async function getUser(req, res) {
             });
         }
 
-        return res.status(200).json({
-            success: true,
-            data: user,
-        });
+        return res.status(200).json(user);
     } catch (error) {
         // User status update güvenli blok
         try {

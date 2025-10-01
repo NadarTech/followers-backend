@@ -174,7 +174,7 @@ async function fetchUserData(req, res) {
     // Kuyruğa followers + following joblarını ekle
     await fetchQueue.add(
         { sessionId, userId, type: "followers" },
-       // { jobId: `${userId}-followers` } // aynı user için tekrar eklenmesin
+        { jobId: `${userId}-followers`, removeOnComplete: true } // aynı user için tekrar eklenmesin
     );
 
     console.log("geldi");
@@ -182,7 +182,7 @@ async function fetchUserData(req, res) {
 
     await fetchQueue.add(
         { sessionId, userId, type: "following" },
-        //{ jobId: `${userId}-following` }
+        { jobId: `${userId}-following`, removeOnComplete: true }
     );
 
     console.log("geldi2");
@@ -201,7 +201,7 @@ function delay(ms) {
 
 async function fetchPage(sessionId, userId, type, endCursor) {
     console.log("fetch page started");
-    
+
     // User-Agent rotation
     const userAgents = [
         "Instagram 293.0.0.36.101 Android",
@@ -221,7 +221,7 @@ async function fetchPage(sessionId, userId, type, endCursor) {
         first: 50
     };
     console.log(variables);
-    
+
     if (endCursor) variables.after = endCursor;
 
     console.log('endCursor ', endCursor);

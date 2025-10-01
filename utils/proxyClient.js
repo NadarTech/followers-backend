@@ -112,7 +112,7 @@ async function axiosGetWithProxy(url, options, userId, retries = 3) {
                 });
 
                 markSuccess(idx);
-                if (jitter) await new Promise(r => setTimeout(r, jitter));
+                await delay(2000);
                 return resp;
             } catch (err) {
                 markError(idx);

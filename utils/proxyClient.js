@@ -79,17 +79,6 @@ function buildRotatingProxyUrl(proxyUrl) {
     return `${proxyUrl}/?session=${sessionId}`;
 }
 
-
-function buildStickyProxyUrl(proxyUrl, userId) {
-    // session id üretelim (her userId için sabit kalır)
-    const sessionId = crypto.createHash("md5").update(String(userId)).digest("hex").slice(0, 8);
-    // proxy URL’sine session param ekle
-    if (proxyUrl.includes("?")) {
-        return `${proxyUrl}&session=${sessionId}`;
-    }
-    return `${proxyUrl}/?session=${sessionId}`;
-}
-
 function buildRotatingProxyUrl(proxyUrl) {
     const sessionId = crypto.randomBytes(6).toString("hex");
     if (proxyUrl.includes("?")) {

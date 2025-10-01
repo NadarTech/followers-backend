@@ -9,13 +9,40 @@ const { axiosGetWithProxy } = require("../utils/proxyClient");
 async function getUser(req, res) {
     try {
         const user = await User.findOne({ where: { userId: req.userId } });
-        return res.status(200).json(user);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found",
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            data: user,
+        });
     } catch (error) {
-        await User.update({ status: false }, { where: { userId: req.userId } });
-        console.error("❌ GetUser Hata:", error.response?.data || error.message);
-        return res.status(500).json({ message: error.response?.data || error.message });
+        // User status update güvenli blok
+        try {
+            await User.update({ status: false }, { where: { userId: req.userId } });
+        } catch (updateErr) {
+            console.error("❌ Failed to update user status:", updateErr.message);
+        }
+
+        // Hata log
+        console.error(
+            "❌ GetUser Hata:",
+            error.message,
+            error.response ? JSON.stringify(error.response.data, null, 2) : ""
+        );
+
+        return res.status(500).json({
+            message: "Internal server error",
+            error: error.message,
+        });
     }
 }
+
 
 async function deleteAccount(req, res) {
     try {
@@ -101,8 +128,6 @@ async function refreshUser(req, res) {
 async function createUser(req, res) {
     const { sessionId, userId } = req.body;
     try {
-        console.log(req.body);
-
         if (!sessionId || !userId) {
             return res.status(400).json({ error: "Account problem" });
         }
@@ -124,7 +149,6 @@ async function createUser(req, res) {
 
         const response2 = await axios.get(url, { headers });
         const response = response2.data.user;
-        console.log(response);
 
         const username = response.username;
         const profilePhoto = response.profile_pic_url;

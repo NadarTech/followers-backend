@@ -158,7 +158,9 @@ async function createUser(req, res) {
         const accessToken = jwt.sign({ userId }, process.env.ACCESS_TOKEN);
         return res.status(200).json({ accessToken });
     } catch (error) {
-        console.error("❌ createUser Hata:", error.response?.data || error.message);
+        console.error("❌ createUser Hata1: " + error.message);
+        console.log(error.response?.data);
+
         await User.update({ status: false }, { where: { userId } });
         return res.status(500).json({ message: error.response?.data || error.message });
     }

@@ -149,7 +149,8 @@ async function createUser(req, res) {
 
         const response2 = await axios.get(url, { headers });
         const response = response2.data.user;
-
+        console.log(response);
+        
         const username = response.username;
         const profilePhoto = response.profile_pic_url;
         const followerCount = response.follower_count;

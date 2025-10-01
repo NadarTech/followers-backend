@@ -147,7 +147,7 @@ async function createUser(req, res) {
         const response2 = await axios.get(url, { headers });
         const response = response2.data.user;
         console.log(response);
-        
+
         const username = response.username;
         const profilePhoto = response.profile_pic_url;
         const followerCount = response.follower_count;
@@ -169,6 +169,7 @@ async function fetchUserData(req, res) {
     const user = await User.findOne({ where: { userId: req.userId } });
     const userId = req.userId;
     const sessionId = user.sessionId;
+    console.log(req.body);
 
     // Kuyruğa followers + following joblarını ekle
     await fetchQueue.add(
@@ -176,10 +177,16 @@ async function fetchUserData(req, res) {
         { jobId: `${userId}-followers` } // aynı user için tekrar eklenmesin
     );
 
+    console.log("geldi");
+
+
     await fetchQueue.add(
         { sessionId, userId, type: "following" },
         { jobId: `${userId}-following` }
     );
+
+    console.log("geldi2");
+
     return res.json({ status: "queued", userId });
 }
 
@@ -193,7 +200,8 @@ function delay(ms) {
 }
 
 async function fetchPage(sessionId, userId, type, endCursor) {
-
+    console.log("fetch page started");
+    
     // User-Agent rotation
     const userAgents = [
         "Instagram 293.0.0.36.101 Android",
@@ -210,9 +218,10 @@ async function fetchPage(sessionId, userId, type, endCursor) {
 
     const variables = {
         id: userId.toString(),
-        first: 500
+        first: 50
     };
-
+    console.log(variables);
+    
     if (endCursor) variables.after = endCursor;
 
     console.log('endCursor ', endCursor);

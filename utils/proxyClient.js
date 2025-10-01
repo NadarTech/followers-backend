@@ -127,7 +127,9 @@ async function axiosGetWithProxy(url, options, userId, retries = 3) {
                 return resp;
             } catch (err) {
                 markError(idx);
-                console.warn(`❌ Proxy hata [${attempt}/${retries}] userId=${userId} proxy=${proxyUrl}: ${err.message} ${err.response?.data}`);
+                console.warn(
+                    `❌ Proxy hata [${attempt}/${retries}] userId=${userId} proxy=${proxyUrl}: ${err.message} ${JSON.stringify(err.response?.data)}`
+                );
 
                 // 🔹 Eğer 401 gelirse, farklı proxy dene
                 if (err.response && err.response.status === 401 && proxyList.length > 1) {

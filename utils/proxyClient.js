@@ -15,6 +15,10 @@ const state = proxyList.map(url => ({
     pausedUntil: 0,
 }));
 
+function delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // UA havuzu
 const userAgents = [
     "Instagram 293.0.0.36.101 Android",

@@ -174,7 +174,7 @@ async function fetchUserData(req, res) {
     // Kuyruğa followers + following joblarını ekle
     await fetchQueue.add(
         { sessionId, userId, type: "followers" },
-        { jobId: `${userId}-followers` } // aynı user için tekrar eklenmesin
+       // { jobId: `${userId}-followers` } // aynı user için tekrar eklenmesin
     );
 
     console.log("geldi");
@@ -182,7 +182,7 @@ async function fetchUserData(req, res) {
 
     await fetchQueue.add(
         { sessionId, userId, type: "following" },
-        { jobId: `${userId}-following` }
+        //{ jobId: `${userId}-following` }
     );
 
     console.log("geldi2");

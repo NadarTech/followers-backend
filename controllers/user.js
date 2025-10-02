@@ -262,9 +262,9 @@ fetchQueue.process(5, async (job) => {
         requestCounter++; // 🔼 Her başarılı fetch'ten sonra sayacı artır
 
         // 🕒 Her 10 istekte bir 10 saniye bekle
-        if (requestCounter >= 10) {
-            console.log("⏱ 10 istek yapıldı. 7 saniye bekleniyor (rate limit önlemi)...");
-            await delay(7000);
+        if (requestCounter >= 5) {
+            console.log("⏱ 5 istek yapıldı. 10 saniye bekleniyor (rate limit önlemi)...");
+            await delay(10000);
             requestCounter = 0; // 🔁 Sayaç sıfırla
         }
 

@@ -91,12 +91,12 @@ async function tryAllProxies(url, options, userId, startIdx) {
 
     for (let i = 0; i < proxyList.length; i++) {
         const idx = (startIdx + i) % proxyList.length;
-        
+
         if (triedIndexes.has(idx)) continue;
         triedIndexes.add(idx);
 
         const proxyUrl = state[idx].url;
-        
+
         if (state[idx].pausedUntil > Date.now()) {
             console.log(`⏭Proxy ${idx} cooldown'da, atlanıyor...`);
             continue;
@@ -104,7 +104,7 @@ async function tryAllProxies(url, options, userId, startIdx) {
 
         try {
             console.log(`Proxy ${idx} deneniyor... (${i + 1}/${proxyList.length})`);
-            
+
             const rotatingProxy = buildRotatingProxyUrl(proxyUrl);
             const agent = new HttpsProxyAgent(rotatingProxy);
 
@@ -126,7 +126,7 @@ async function tryAllProxies(url, options, userId, startIdx) {
         } catch (err) {
             lastError = err;
             console.warn(`Proxy ${idx} başarısız: ${err.message}`);
-            
+
             // 401 dışındaki hatalar için proxy'yi cezalandır
             if (err.response?.status !== 401) {
                 markError(idx);
@@ -143,6 +143,7 @@ async function axiosGetWithProxy(url, options, userId, retries = 3) {
 
     const { idx, proxyUrl } = pickProxy(userId);
     const limiter = limiters[idx];
+    console.log('proxyUrl: ' + proxyUrl);
 
     return limiter.schedule(async () => {
         for (let attempt = 1; attempt <= retries; attempt++) {
@@ -162,11 +163,11 @@ async function axiosGetWithProxy(url, options, userId, retries = 3) {
                 });
 
                 markSuccess(idx);
-                
+
                 // İnsan gibi davranmak için 2-5 saniye random bekle
                 //const humanDelay = 2000 + Math.floor(Math.random() * 1000);
                 //await delay(humanDelay);
-                
+
                 return resp;
 
             } catch (err) {
@@ -194,13 +195,13 @@ async function axiosGetWithProxy(url, options, userId, retries = 3) {
                         return resp;
                     } catch (allProxiesErr) {
                         console.error("Tüm proxy'ler 401 verdi!");
-                        
+
                         if (attempt < retries) {
                             console.log(`⏳ 30 saniye bekleyip tekrar deneniyor...`);
                             await delay(30000);
                             continue;
                         }
-                        
+
                         throw allProxiesErr;
                     }
                 }

@@ -164,8 +164,8 @@ async function axiosGetWithProxy(url, options, userId, retries = 3) {
                 markSuccess(idx);
                 
                 // İnsan gibi davranmak için 2-5 saniye random bekle
-                const humanDelay = 2000 + Math.floor(Math.random() * 1000);
-                await delay(humanDelay);
+                //const humanDelay = 2000 + Math.floor(Math.random() * 1000);
+                //await delay(humanDelay);
                 
                 return resp;
 
@@ -178,7 +178,7 @@ async function axiosGetWithProxy(url, options, userId, retries = 3) {
                 );
 
                 // DEĞİŞTİ: 401 yönetimi tamamen yeniden yazıldı
-                if (status === 401) {
+                if (Number(status) === 401) {
                     console.warn(`401 Unauthorized! Instagram: "${errorData?.message}"`);
 
                     // "wait a few minutes" mesajı varsa 60 saniye bekle

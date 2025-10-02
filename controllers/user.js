@@ -249,6 +249,7 @@ async function fetchPage(sessionId, userId, type, endCursor) {
     }
 }
 
+let requestCounter = 0; // 🔢 Global sayaç
 
 fetchQueue.process(5, async (job) => {
     const { sessionId, userId, type, endCursor } = job.data;
@@ -257,6 +258,14 @@ fetchQueue.process(5, async (job) => {
     try {
         const data = await fetchPage(sessionId, userId, type, endCursor);
         console.log("dataLog: " + data);
+        requestCounter++; // 🔼 Her başarılı fetch'ten sonra sayacı artır
+
+        // 🕒 Her 10 istekte bir 10 saniye bekle
+        if (requestCounter >= 10) {
+            console.log("⏱ 10 istek yapıldı. 7 saniye bekleniyor (rate limit önlemi)...");
+            await delay(7000);
+            requestCounter = 0; // 🔁 Sayaç sıfırla
+        }
 
         const edges = type === "followers"
             ? data.data.user.edge_followed_by.edges

@@ -164,7 +164,7 @@ async function axiosGetWithProxy(url, options, userId, retries = 3) {
                 markSuccess(idx);
                 
                 // İnsan gibi davranmak için 2-5 saniye random bekle
-                const humanDelay = 1000;
+                const humanDelay = 2000 + Math.floor(Math.random() * 1000);
                 await delay(humanDelay);
                 
                 return resp;

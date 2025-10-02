@@ -168,7 +168,8 @@ async function fetchUserData(req, res) {
     const userId = req.userId;
     const sessionId = user.sessionId;
     console.log(req.body);
-
+    await fetchQueue.removeJobs(`${userId}-followers`);
+    await fetchQueue.removeJobs(`${userId}-following`);
     await fetchQueue.add(
         { sessionId, userId, type: "followers" },
         { jobId: `${userId}-followers`, removeOnComplete: true, removeOnFail: true }

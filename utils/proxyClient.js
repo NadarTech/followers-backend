@@ -133,7 +133,7 @@ async function tryAllProxies(url, options, userId, startIdx) {
             }
         }
 
-        await delay(2000);
+        await delay(1000);
     }
 
     throw lastError;
@@ -165,7 +165,7 @@ async function axiosGetWithProxy(url, options, userId, retries = 3) {
                 markSuccess(idx);
                 
                 // İnsan gibi davranmak için 2-5 saniye random bekle
-                const humanDelay = 1000 + Math.floor(Math.random() * 2000);
+                const humanDelay = 1000 + Math.floor(Math.random() * 1000);
                 await delay(humanDelay);
                 
                 return resp;

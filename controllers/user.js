@@ -256,6 +256,7 @@ fetchQueue.process(5, async (job) => {
 
     try {
         const data = await fetchPage(sessionId, userId, type, endCursor);
+        console.log("dataLog: " + data);
 
         const edges = type === "followers"
             ? data.data.user.edge_followed_by.edges

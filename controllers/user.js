@@ -167,9 +167,10 @@ async function fetchUserData(req, res) {
     const user = await User.findOne({ where: { userId: req.userId } });
     const userId = req.userId;
     const sessionId = user.sessionId;
-    console.log(req.body);
-    await fetchQueue.removeJobs(`${userId}-followers`);
-    await fetchQueue.removeJobs(`${userId}-following`);
+    if (user.requestStatus == false) {
+        await fetchQueue.removeJobs(`${userId}-followers`);
+        await fetchQueue.removeJobs(`${userId}-following`);
+    }
     await fetchQueue.add(
         { sessionId, userId, type: "followers" },
         { jobId: `${userId}-followers`, removeOnComplete: true, removeOnFail: true }
@@ -257,7 +258,7 @@ fetchQueue.process(5, async (job) => {
 
     try {
         const data = await fetchPage(sessionId, userId, type, endCursor);
-        console.log("dataLog: " + data);
+        console.log(`dataLog: ${data}`);
         requestCounter++; // 🔼 Her başarılı fetch'ten sonra sayacı artır
 
         // 🕒 Her 10 istekte bir 10 saniye bekle

@@ -31,8 +31,8 @@ function getRandomUA() {
     return userAgents[Math.floor(Math.random() * userAgents.length)];
 }
 
-// DEÄžÄ°ÅžTÄ°: 3000'den 10000'e Ã§Ä±karÄ±ldÄ±
-// Instagram "wait a few minutes" diyordu, Ã§ok hÄ±zlÄ± buluyordu
+// DEĞİŞTİ: 3000'den 10000'e çıkarıldı
+// Instagram "wait a few minutes" diyordu, çok hızlı buluyordu
 const limiters = proxyList.map(() => new Bottleneck({
     minTime: parseInt(process.env.PROXY_MIN_TIME || "10000", 10),
     maxConcurrent: parseInt(process.env.PROXY_MAX_CONCURRENCY || "1", 10),
@@ -66,7 +66,7 @@ function markError(idx) {
     if (state[idx].errorCount >= ERROR_THRESHOLD) {
         state[idx].pausedUntil = Date.now() + COOLDOWN_MS;
         state[idx].errorCount = 0;
-        console.warn(`Proxy ${state[idx].url} cooldowna alÄ±ndÄ±.`);
+        console.warn(`Proxy ${state[idx].url} cooldowna alındı.`);
     }
 }
 
@@ -83,7 +83,7 @@ function buildRotatingProxyUrl(proxyUrl) {
     return `${proxyUrl}/?session=${sessionId}`;
 }
 
-// YENÄ° FONKSÄ°YON: 401 geldiÄŸinde tÃ¼m proxy'leri dene
+// YENİ FONKSİYON: 401 geldiğinde tüm proxy'leri dene
 // Eski kod sadece 1 alternatif deniyordu
 async function tryAllProxies(url, options, userId, startIdx) {
     const triedIndexes = new Set();
@@ -98,7 +98,7 @@ async function tryAllProxies(url, options, userId, startIdx) {
         const proxyUrl = state[idx].url;
         
         if (state[idx].pausedUntil > Date.now()) {
-            console.log(`â­Proxy ${idx} cooldown'da, atlanÄ±yor...`);
+            console.log(`⏭Proxy ${idx} cooldown'da, atlanıyor...`);
             continue;
         }
 
@@ -120,14 +120,14 @@ async function tryAllProxies(url, options, userId, startIdx) {
             });
 
             markSuccess(idx);
-            console.log(`Proxy ${idx} baÅŸarÄ±lÄ±!`);
+            console.log(`Proxy ${idx} başarılı!`);
             return resp;
 
         } catch (err) {
             lastError = err;
-            console.warn(`Proxy ${idx} baÅŸarÄ±sÄ±z: ${err.message}`);
+            console.warn(`Proxy ${idx} başarısız: ${err.message}`);
             
-            // 401 dÄ±ÅŸÄ±ndaki hatalar iÃ§in proxy'yi cezalandÄ±r
+            // 401 dışındaki hatalar için proxy'yi cezalandır
             if (err.response?.status !== 401) {
                 markError(idx);
             }
@@ -164,7 +164,7 @@ async function axiosGetWithProxy(url, options, userId, retries = 3) {
 
                 markSuccess(idx);
                 
-                // Ä°nsan gibi davranmak iÃ§in 2-5 saniye random bekle
+                // İnsan gibi davranmak için 2-5 saniye random bekle
                 const humanDelay = 2000 + Math.floor(Math.random() * 3000);
                 await delay(humanDelay);
                 
@@ -178,26 +178,26 @@ async function axiosGetWithProxy(url, options, userId, retries = 3) {
                     `Proxy hata [${attempt}/${retries}] userId=${userId} status=${status}: ${err.message}`
                 );
 
-                // DEÄžÄ°ÅžTÄ°: 401 yÃ¶netimi tamamen yeniden yazÄ±ldÄ±
+                // DEĞİŞTİ: 401 yönetimi tamamen yeniden yazıldı
                 if (status === 401) {
                     console.warn(`401 Unauthorized! Instagram: "${errorData?.message}"`);
 
-                    // "wait a few minutes" mesajÄ± varsa 60 saniye bekle
+                    // "wait a few minutes" mesajı varsa 60 saniye bekle
                     if (errorData?.message?.includes("wait a few minutes")) {
                         console.warn("Instagram rate limit! 60 saniye bekleniyor...");
                         await delay(60000);
                     }
 
-                    // TÃ¼m proxy'leri dene
-                    console.log("TÃ¼m proxy'ler deneniyor...");
+                    // Tüm proxy'leri dene
+                    console.log("Tüm proxy'ler deneniyor...");
                     try {
                         const resp = await tryAllProxies(url, options, userId, idx);
                         return resp;
                     } catch (allProxiesErr) {
-                        console.error("TÃ¼m proxy'ler 401 verdi!");
+                        console.error("Tüm proxy'ler 401 verdi!");
                         
                         if (attempt < retries) {
-                            console.log(`â³ 30 saniye bekleyip tekrar deneniyor...`);
+                            console.log(`⏳ 30 saniye bekleyip tekrar deneniyor...`);
                             await delay(30000);
                             continue;
                         }

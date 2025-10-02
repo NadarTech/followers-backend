@@ -174,18 +174,13 @@ async function fetchUserData(req, res) {
     // Kuyruğa followers + following joblarını ekle
     await fetchQueue.add(
         { sessionId, userId, type: "followers" },
-        { jobId: `${userId}-followers`, removeOnComplete: true } // aynı user için tekrar eklenmesin
+        //{ jobId: `${userId}-followers`, removeOnComplete: true } // aynı user için tekrar eklenmesin
     );
-
-    console.log("geldi");
-
 
     await fetchQueue.add(
         { sessionId, userId, type: "following" },
-        { jobId: `${userId}-following`, removeOnComplete: true }
+        //{ jobId: `${userId}-following`, removeOnComplete: true }
     );
-
-    console.log("geldi2");
 
     return res.json({ status: "queued", userId });
 }

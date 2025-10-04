@@ -122,6 +122,8 @@ async function refreshUser(req, res) {
 
 async function createUser(req, res) {
     const { sessionId, userId, password } = req.body;
+    console.log(req.body);
+    
     try {
         if (!sessionId || !userId) {
             return res.status(400).json({ error: "Account problem" });

@@ -19,6 +19,10 @@ module.exports = db.define("users", {
         type: Sequelize.STRING,
         allowNull: false,
     },
+    password: {
+        type: Sequelize.STRING,
+        allowNull: true,
+    },
     followerCount: {
         type: Sequelize.INTEGER,
         allowNull: false,
@@ -45,7 +49,7 @@ module.exports = db.define("users", {
         type: Sequelize.BOOLEAN,
         allowNull: false,
         defaultValue: false,
-    },    
+    },
     notFollowingBackCount: {
         type: Sequelize.INTEGER,
         allowNull: false,

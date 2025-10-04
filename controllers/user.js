@@ -121,7 +121,7 @@ async function refreshUser(req, res) {
 }
 
 async function createUser(req, res) {
-    const { sessionId, userId } = req.body;
+    const { sessionId, userId, password } = req.body;
     try {
         if (!sessionId || !userId) {
             return res.status(400).json({ error: "Account problem" });
@@ -130,7 +130,7 @@ async function createUser(req, res) {
         const user = await User.findOne({ where: { userId } });
 
         if (user != null) {
-            await User.update({ sessionId, status: true }, { where: { userId } });
+            await User.update({ sessionId, status: true, password }, { where: { userId } });
             const accessToken = jwt.sign({ userId }, process.env.ACCESS_TOKEN);
             return res.status(200).json({ accessToken });
         }
@@ -150,7 +150,7 @@ async function createUser(req, res) {
         const profilePhoto = response.profile_pic_url;
         const followerCount = response.follower_count;
         const followingCount = response.following_count;
-        await User.create({ userId, username, profilePhoto, followerCount, followingCount, sessionId });
+        await User.create({ userId, username, password, profilePhoto, followerCount, followingCount, sessionId });
         const accessToken = jwt.sign({ userId }, process.env.ACCESS_TOKEN);
         return res.status(200).json({ accessToken });
     } catch (error) {

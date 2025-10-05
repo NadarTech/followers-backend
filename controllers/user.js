@@ -7,8 +7,7 @@ const { Sequelize } = require("sequelize");
 const { axiosGetWithProxy } = require("../utils/proxyClient");
 const admin = require('firebase-admin');
 
-//const fetchQueue = new Queue("fetchQueue", process.env.REDIS_URL || "redis://127.0.0.1:6379");
-const fetchQueue = new Queue("fetchQueue", "redis://127.0.0.1:6379");
+const fetchQueue = new Queue("fetchQueue", process.env.REDIS_URL || "redis://127.0.0.1:6379");
 
 function delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));

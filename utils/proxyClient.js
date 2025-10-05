@@ -3,229 +3,193 @@ const axios = require("axios");
 const { HttpsProxyAgent } = require("https-proxy-agent");
 const Bottleneck = require("bottleneck");
 const crypto = require("crypto");
+const { IgApiClient } = require('instagram-private-api');
+const User = require('../models/user');
 
-const proxyList = (process.env.PROXIES || "")
-    .split(",")
-    .map(p => p.trim())
-    .filter(Boolean);
+// Tek proxy URL
+const PROXY_URL = process.env.PROXY_URL || "";
 
-const state = proxyList.map(url => ({
-    url,
-    errorCount: 0,
-    pausedUntil: 0,
-}));
+// Rate limiter - her istek arası 1.5 saniye bekle
+const limiter = new Bottleneck({
+    minTime: 1500,
+    maxConcurrent: parseInt(process.env.MAX_CONCURRENT || "5", 10),
+});
 
 function delay(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-const userAgents = [
-    "Instagram 293.0.0.36.101 Android",
-    "Instagram 289.0.0.77.109 Android",
-    "Instagram 250.0.0.21.109 iOS",
-    "Instagram 260.0.0.19.109 Android",
-    "Instagram 280.0.0.21.111 iOS"
-];
+// Proxy URL'ine random session ID ekle
+function buildProxyUrlWithSession(baseUrl) {
+    if (!baseUrl) return null;
 
-function getRandomUA() {
-    return userAgents[Math.floor(Math.random() * userAgents.length)];
-}
+    const sessionId = crypto.randomBytes(8).toString("hex");
 
-// DEĞİŞTİ: 3000'den 10000'e çıkarıldı
-// Instagram "wait a few minutes" diyordu, çok hızlı buluyordu
-const limiters = proxyList.map(() => new Bottleneck({
-    minTime: parseInt(process.env.PROXY_MIN_TIME || "10000", 10),
-    maxConcurrent: parseInt(process.env.PROXY_MAX_CONCURRENCY || "1", 10),
-}));
-
-const ERROR_THRESHOLD = parseInt(process.env.PROXY_ERROR_THRESHOLD || "4", 10);
-const COOLDOWN_MS = parseInt(process.env.PROXY_COOLDOWN_MS || (15 * 60 * 1000), 10);
-
-function hashToIndex(key, mod) {
-    const h = crypto.createHash("md5").update(String(key)).digest("hex");
-    const num = parseInt(h.slice(0, 8), 16);
-    return num % mod;
-}
-
-function pickProxy(userId) {
-    if (!proxyList.length) return { idx: -1, proxyUrl: null };
-    const startIdx = hashToIndex(userId, proxyList.length);
-    const now = Date.now();
-    for (let i = 0; i < proxyList.length; i++) {
-        const idx = (startIdx + i) % proxyList.length;
-        if (!state[idx].pausedUntil || state[idx].pausedUntil <= now) {
-            return { idx, proxyUrl: state[idx].url };
-        }
+    if (baseUrl.includes("?")) {
+        return `${baseUrl}&session=${sessionId}`;
     }
-    return { idx: startIdx, proxyUrl: state[startIdx].url };
+    return `${baseUrl}?session=${sessionId}`;
 }
 
-function markError(idx) {
-    if (idx < 0) return;
-    state[idx].errorCount++;
-    if (state[idx].errorCount >= ERROR_THRESHOLD) {
-        state[idx].pausedUntil = Date.now() + COOLDOWN_MS;
-        state[idx].errorCount = 0;
-        console.warn(`Proxy ${state[idx].url} cooldowna alındı.`);
+// Ana request fonksiyonu
+async function axiosGetWithProxy(url, options, userId, userAgent) {
+    // Proxy yoksa direkt istek at
+    if (!PROXY_URL) {
+        console.log("⚠️ Proxy yok, direkt istek atılıyor");
+        return axios.get(url, options);
     }
-}
 
-function markSuccess(idx) {
-    if (idx < 0) return;
-    state[idx].errorCount = 0;
-}
-
-function buildRotatingProxyUrl(proxyUrl) {
-    const sessionId = crypto.randomBytes(6).toString("hex");
-    if (proxyUrl.includes("?")) {
-        return `${proxyUrl}&session=${sessionId}`;
-    }
-    return `${proxyUrl}/?session=${sessionId}`;
-}
-
-// YENİ FONKSİYON: 401 geldiğinde tüm proxy'leri dene
-// Eski kod sadece 1 alternatif deniyordu
-async function tryAllProxies(url, options, userId, startIdx) {
-    const triedIndexes = new Set();
-    let lastError;
-
-    for (let i = 0; i < proxyList.length; i++) {
-        const idx = (startIdx + i) % proxyList.length;
-
-        if (triedIndexes.has(idx)) continue;
-        triedIndexes.add(idx);
-
-        const proxyUrl = state[idx].url;
-
-        if (state[idx].pausedUntil > Date.now()) {
-            console.log(`⏭Proxy ${idx} cooldown'da, atlanıyor...`);
-            continue;
-        }
-
+    return limiter.schedule(async () => {
         try {
-            console.log(`Proxy ${idx} deneniyor... (${i + 1}/${proxyList.length})`);
+            // Her istekte yeni session ID
+            const proxyWithSession = buildProxyUrlWithSession(PROXY_URL);
+            const agent = new HttpsProxyAgent(proxyWithSession);
 
-            const rotatingProxy = buildRotatingProxyUrl(proxyUrl);
-            const agent = new HttpsProxyAgent(rotatingProxy);
-
-            const resp = await axios.get(url, {
+            const response = await axios.get(url, {
                 ...options,
                 headers: {
                     ...(options.headers || {}),
-                    "User-Agent": getRandomUA(),
+                    "User-Agent": userAgent,
                 },
                 httpsAgent: agent,
                 proxy: false,
                 timeout: 45000,
             });
 
-            markSuccess(idx);
-            console.log(`Proxy ${idx} başarılı!`);
-            return resp;
+            console.log(`✅ Başarılı - Status: ${response.status}`);
+            return response;
 
-        } catch (err) {
-            lastError = err;
-            console.warn(`Proxy ${idx} başarısız: ${err.message}`);
+        } catch (error) {
+            const status = error.response?.status;
+            const message = error.response?.data?.message || error.message;
+            console.warn(`Kullanıcı verileri çekerken hata aldı ve\nstatus: ${status}\nmessage:${message}`);
 
-            // 401 dışındaki hatalar için proxy'yi cezalandır
-            if (err.response?.status !== 401) {
-                markError(idx);
+            await delay(10000);
+
+            if (userId) {
+                try {
+                    console.log("Tekrar login yapılıyor");
+
+                    await loginAgain(userId);
+
+                    console.log("✅ Login başarılı, istek tekrar deneniyor...");
+                    // Login başarılıysa devam et, döngü tekrar deneyecek
+                    return await axiosGetWithProxy(url, options, userId, userAgent);
+
+                } catch (loginErr) {
+                    console.warn("❌ Login tekrar başarısız:", loginErr.message);
+                    await User.update({ status: false }, { where: { userId } });
+                    throw new Error(`Login tekrar başarısız`);
+                }
+            } else {
+                console.warn("⚠️ User model veya userId yok, tekrar giriş yapılamadı");
+                throw new Error(`User model veya userId yok tekrar giriş yapılamadı`);
             }
+
         }
+
+    });
+}
+
+// Login fonksiyonu (401 durumunda çağrılacak)
+async function loginAgain(userId) {
+
+    try {
+        // Kullanıcıyı veritabanından çek
+        const dbUser = await User.findOne({ where: { userId } });
+
+        if (!dbUser) {
+            throw new Error('Kullanıcı bulunamadı');
+        }
+
+        const ig = new IgApiClient();
+
+        // Proxy ayarı
+        if (PROXY_URL) {
+            const proxyWithSession = buildProxyUrlWithSession(PROXY_URL);
+            ig.state.proxyUrl = proxyWithSession;
+        }
+
+        // Mobildeki cihaz ayarlarını koru (bunları createUser'da kaydettiysen)
+        if (dbUser.deviceId) ig.state.deviceId = dbUser.deviceId;
+        if (dbUser.userAgent) ig.state.appUserAgent = dbUser.userAgent;
+        ig.state.generateDevice(dbUser.username);
+
+        // 1️⃣ Önce var olan session'ı geri yükle
+        if (dbUser.sessionId && dbUser.userId) {
+            await ig.state.deserialize({
+                cookies: JSON.stringify({
+                    version: 'tough-cookie@2.5.0',
+                    storeType: 'MemoryCookieStore',
+                    rejectPublicSuffixes: true,
+                    cookies: [
+                        { key: 'sessionid', value: dbUser.sessionId, domain: '.instagram.com', path: '/' },
+                        { key: 'ds_user_id', value: dbUser.userId, domain: '.instagram.com', path: '/' },
+                        { key: 'csrftoken', value: dbUser.csrftoken || 'missing', domain: '.instagram.com', path: '/', },
+                    ],
+                }),
+            });
+        }
+    } catch (error) {
+        console.log(`kullanıcı için hata geldi ${error.message}`);
 
     }
 
-    throw lastError;
-}
-
-async function axiosGetWithProxy(url, options, userId, retries = 3) {
-    if (!proxyList.length) return axios.get(url, options);
-
-    const { idx, proxyUrl } = pickProxy(userId);
-    const limiter = limiters[idx];
-    console.log('proxyUrl: ' + proxyUrl);
-
-    return limiter.schedule(async () => {
-        for (let attempt = 1; attempt <= retries; attempt++) {
-            try {
-                const rotatingProxy = buildRotatingProxyUrl(proxyUrl);
-                const agent = new HttpsProxyAgent(rotatingProxy);
-
-                const resp = await axios.get(url, {
-                    ...options,
-                    headers: {
-                        ...(options.headers || {}),
-                        "User-Agent": getRandomUA(),
-                    },
-                    httpsAgent: agent,
-                    proxy: false,
-                    timeout: 45000,
-                });
-
-                markSuccess(idx);
-
-                // İnsan gibi davranmak için 2-5 saniye random bekle
-                //const humanDelay = 2000 + Math.floor(Math.random() * 1000);
-                //await delay(humanDelay);
-
-                return resp;
-
-            } catch (err) {
-                const status = err.response?.status;
-                const errorData = err.response?.data;
-
-                console.warn(
-                    `Proxy hata [${attempt}/${retries}] userId=${userId} status=${status}: ${err.message}`
-                );
-
-                // DEĞİŞTİ: 401 yönetimi tamamen yeniden yazıldı
-                if (Number(status) === 401) {
-                    console.warn(`401 Unauthorized! Instagram: "${errorData?.message}"`);
-
-                    // "wait a few minutes" mesajı varsa 60 saniye bekle
-                    if (errorData?.message?.includes("wait a few minutes")) {
-                        console.warn("Instagram rate limit! 60 saniye bekleniyor...");
-                        await delay(60000);
-                    }
-
-                    // Tüm proxy'leri dene
-                    console.log("Tüm proxy'ler deneniyor...");
-                    try {
-                        const resp = await tryAllProxies(url, options, userId, idx);
-                        return resp;
-                    } catch (allProxiesErr) {
-                        console.error("Tüm proxy'ler 401 verdi!");
-
-                        if (attempt < retries) {
-                            console.log(`⏳ 30 saniye bekleyip tekrar deneniyor...`);
-                            await delay(30000);
-                            continue;
-                        }
-
-                        throw allProxiesErr;
-                    }
-                }
-
-                // 429 rate limit
-                if (status === 429) {
-                    console.warn("429 Rate Limit! 2 dakika bekleniyor...");
-                    await delay(120000);
-                    continue;
-                }
-
-                markError(idx);
-
-                if (attempt === retries) {
-                    throw err;
-                }
-
-                // Exponential backoff
-                const backoffTime = 2000 * Math.pow(2, attempt - 1);
-                console.log(`${backoffTime / 1000} saniye bekleyip tekrar deneniyor...`);
-                await delay(backoffTime);
-            }
-        }
-    });
+    /*  if (!dbUser.username || !dbUser.password) {
+         console.error(`❌ Login bilgileri eksik: ${userId}`);
+ 
+         // Status'u false yap        
+         await User.update({ status: false }, { where: { userId } });
+         throw new Error('Login bilgileri eksik - Status false yapıldı');
+     }
+ 
+     try {
+         console.log(`🔄 Tekrar login yapılıyor: ${dbUser.username}`);
+ 
+         const user = await ig.account.login(dbUser.username, dbUser.password);
+         const token = ig.state.authorization;
+ 
+         await ig.challenge.auto(true);
+ 
+         let sessionId = null;
+ 
+         // Token'dan sessionid çıkar
+         if (token && token.startsWith('Bearer IGT:2:')) {
+             const base64 = token.split('Bearer IGT:2:')[1];
+             const json = JSON.parse(Buffer.from(base64, 'base64').toString('utf8'));
+             console.log('🔓 Decoded IGT token:', json);
+ 
+             // Session ID'yi bul
+             sessionId = json.sessionid || ig.state.cookieUserId;
+         }
+ 
+         // Kullanıcıyı veritabanında güncelle
+         if (sessionId) {
+             await User.update({ status: true, sessionId: sessionId }, { where: { userId } });
+             console.log(`✅ SessionId güncellendi: ${dbUser.username} -> ${sessionId}`);
+         }
+ 
+         return { sessionId, user };
+ 
+     } catch (err) {
+         console.error(`❌ Login hatası (${dbUser.username}):`, err.message);
+ 
+         const errorMessage = err.message || '';
+         const statusCode = err.response?.statusCode || err.statusCode;
+ 
+         // 401 dışındaki hatalar için status:false yap
+         // Örnek: 400 (bad password), 403 (banned), 429 (rate limit), network errors
+         if (statusCode && statusCode !== 401) {
+             console.warn(`⚠️ 401 dışında hata (${statusCode}) - Status false yapılıyor`);
+             await User.update({ status: false }, { where: { userId } });
+         } else if (!statusCode && !errorMessage.includes('challenge')) {
+             // Network hatası veya beklenmeyen hata
+             console.warn(`⚠️ Beklenmeyen hata - Status false yapılıyor`);
+             await User.update({ status: false }, { where: { userId } });
+         }
+ 
+         throw err;
+     } */
 }
 
 module.exports = { axiosGetWithProxy };

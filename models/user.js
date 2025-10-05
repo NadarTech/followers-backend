@@ -23,6 +23,27 @@ module.exports = db.define("users", {
         type: Sequelize.STRING,
         allowNull: true,
     },
+    deviceId: {
+        type: Sequelize.STRING,
+        allowNull: true,
+    },
+    userAgent: {
+        type: Sequelize.STRING,
+        allowNull: true,
+    },
+    fetchStatus: {
+        type: Sequelize.STRING,
+        allowNull: true,
+        defaultValue: 'notStarted'
+    },
+    csrfToken: {
+        type: Sequelize.STRING,
+        allowNull: true,
+    },
+    fcmToken: {
+        type: Sequelize.STRING,
+        allowNull: true,
+    },
     followerCount: {
         type: Sequelize.INTEGER,
         allowNull: false,

@@ -5,6 +5,14 @@ const axios = require('axios');
 const Queue = require("bull");
 const { Sequelize } = require("sequelize");
 const { axiosGetWithProxy } = require("../utils/proxyClient");
+const admin = require('firebase-admin');
+
+//const fetchQueue = new Queue("fetchQueue", process.env.REDIS_URL || "redis://127.0.0.1:6379");
+const fetchQueue = new Queue("fetchQueue", "redis://127.0.0.1:6379");
+
+function delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 async function getUser(req, res) {
     try {
@@ -38,90 +46,68 @@ async function getUser(req, res) {
     }
 }
 
+async function saveToken(req, res) {
+    const { token } = req.body;
+    try {
+        const user = await User.findOne({ where: { userId: req.userId } });
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found",
+            });
+        }
+        await User.update({ fcmToken: token }, { where: { userId: req.userId } });
+        return res.status(200).json({ message: 'success' });
+    } catch (error) {
+        try {
+            await User.update({ status: false }, { where: { userId: req.userId } });
+        } catch (updateErr) {
+            console.error("Failed to update user status:", updateErr.message);
+        }
+
+        console.error(
+            "GetUser Hata:",
+            error.message,
+            error.response ? JSON.stringify(error.response.data, null, 2) : ""
+        );
+
+        return res.status(500).json({
+            message: "Internal server error",
+            error: error.message,
+        });
+    }
+}
 
 async function deleteAccount(req, res) {
     try {
         const user = await User.findOne({ where: { userId: req.userId } });
-        if (user != null) {
-            await User.destroy({ where: { userId: req.userId } });
-            await InstagramUser.destroy({ where: { ownerId: req.userId } });
-            return res.status(200).json({ message: 'ok' });
-        } else {
-            return res.status(200).json({ message: 'User not found' });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
         }
+
+        // Kullanıcı bulunduysa silme işlemleri
+        await Promise.all([
+            User.destroy({ where: { userId: req.userId } }),
+            InstagramUser.destroy({ where: { ownerId: req.userId } }),
+        ]);
+
+        return res.status(200).json({ message: 'Account deleted successfully' });
+
     } catch (error) {
+        // Silme sırasında hata olursa, kullanıcıyı pasife çek
         await User.update({ status: false }, { where: { userId: req.userId } });
-        console.error("deleteAccount Hata:", error.response?.data || error.message);
-        return res.status(500).json({ message: error.response?.data || error.message });
-    }
-}
 
-async function unfollow(req, res) {
-    try {
-        const { targetUserId } = req.body;
-        const user = await User.findOne({ where: { userId: req.userId } });
-        const userId = req.userId;
-        const sessionId = user.sessionId;
-        const url = `https://i.instagram.com/api/v1/friendships/destroy/${targetUserId}/`;
+        const errorMessage = error?.response?.data || error.message || 'Unexpected error';
+        console.error('❌ deleteAccount error:', errorMessage);
 
-        const headers = {
-            "User-Agent": "Instagram 200.0.0.29.121 Android",
-            "Cookie": `sessionid=${sessionId}; ds_user_id=${userId};`,
-            "x-ig-app-id": "936619743392459"
-        };
-        await delay(3000);
-
-        const response = await axios.post(url, null, { headers });
-
-        if (response.data?.friendship_status) {
-            await InstagramUser.destroy({
-                where: {
-                    userId: targetUserId,
-                    ownerId: userId,
-                    sourceType: "following",
-                },
-            });
-
-            await User.decrement("followingCount", { by: 1, where: { userId } });
-            return res.status(200).json({ message: 'Success' });
-        } else {
-            return res.status(400).json({ message: "Instagram request failed" });
-        }
-    } catch (error) {
-        console.error("unfollow Hata:", error.response?.data || error.message);
-        await User.update({ status: false }, { where: { userId: req.userId } });
-        return res.status(500).json({ message: error.response?.data || error.message });
-    }
-}
-
-async function refreshUser(req, res) {
-    try {
-        const user = await User.findOne({ where: { userId: req.userId } });
-        const url = `https://i.instagram.com/api/v1/users/${req.userId}/info/`;
-
-        const headers = {
-            "User-Agent": "Instagram 293.0.0.36.101 Android",
-            "Cookie": `sessionid=${user.sessionId}; ds_user_id=${req.userId};`,
-        };
-
-        const response2 = await axios.get(url, { headers });
-        const response = response2.data.user;
-
-        const username = response.username;
-        const profilePhoto = response.profile_pic_url;
-        const followerCount = response.follower_count;
-        const followingCount = response.following_count;
-        await User.update({ username, profilePhoto, followerCount, followingCount, requestStatus: false }, { where: { userId: req.userId } });
-        return res.status(200).json({ message: 'Success' });
-    } catch (error) {
-        console.error("refreshUser Hata:", error.response?.data || error.message);
-        await User.update({ status: false }, { where: { userId: req.userId } });
-        return res.status(500).json({ message: error.response?.data || error.message });
+        return res.status(500).json({ message: errorMessage });
     }
 }
 
 async function createUser(req, res) {
-    const { sessionId, userId, password } = req.body;
+    const { sessionId, userId, password, deviceId, userAgent, csrfToken } = req.body;
     console.log(req.body);
     
     try {
@@ -132,7 +118,7 @@ async function createUser(req, res) {
         const user = await User.findOne({ where: { userId } });
 
         if (user != null) {
-            await User.update({ sessionId, status: true, password }, { where: { userId } });
+            await User.update({ sessionId, status: true, deviceId, userAgent, csrfToken }, { where: { userId } });
             const accessToken = jwt.sign({ userId }, process.env.ACCESS_TOKEN);
             return res.status(200).json({ accessToken });
         }
@@ -140,7 +126,7 @@ async function createUser(req, res) {
         const url = `https://i.instagram.com/api/v1/users/${userId}/info/`;
 
         const headers = {
-            "User-Agent": "Instagram 293.0.0.36.101 Android",
+            "User-Agent": userAgent,
             "Cookie": `sessionid=${sessionId}; ds_user_id=${userId};`,
         };
 
@@ -152,11 +138,10 @@ async function createUser(req, res) {
         const profilePhoto = response.profile_pic_url;
         const followerCount = response.follower_count;
         const followingCount = response.following_count;
-        await User.create({ userId, username, password, profilePhoto, followerCount, followingCount, sessionId });
+        await User.create({ userId, username, profilePhoto, followerCount, followingCount, sessionId, deviceId, userAgent, csrfToken });
         const accessToken = jwt.sign({ userId }, process.env.ACCESS_TOKEN);
         return res.status(200).json({ accessToken });
     } catch (error) {
-        console.error("createUser Hata1: " + error.message);
         console.log(error.response?.data);
 
         await User.update({ status: false }, { where: { userId } });
@@ -164,52 +149,158 @@ async function createUser(req, res) {
     }
 }
 
+async function unfollow(req, res) {
+    const { targetUserId } = req.body;
+    const userId = req.userId;
+
+    try {
+        const user = await User.findOne({ where: { userId } });
+
+        // Eğer user bulunamazsa önce status: false yap, sonra 404 dön
+        if (!user) {
+            await User.update({ status: false }, { where: { userId } });
+            console.warn(`unfollow: user not found -> set status=false for userId=${userId}`);
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        if (!user.sessionId) {
+            console.warn(`unfollow: sessionId missing for userId=${userId}`);
+            return res.status(403).json({ message: "User session not found" });
+        }
+
+        const sessionId = user.sessionId;
+        const url = `https://i.instagram.com/api/v1/friendships/destroy/${targetUserId}/`;
+
+        const headers = {
+            "User-Agent": user.userAgent,
+            "Cookie": `sessionid=${sessionId}; ds_user_id=${userId};`,
+            "x-ig-app-id": "936619743392459",
+        };
+
+        // Küçük gecikme (isteğe bağlı)
+        await delay(2000);
+
+        const response = await axios.post(url, null, { headers });
+
+        if (response.data?.friendship_status) {
+            // Veritabanı güncellemelerini paralel çalıştır
+            await Promise.all([
+                InstagramUser.destroy({
+                    where: {
+                        userId: targetUserId,
+                        ownerId: userId,
+                        sourceType: "following",
+                    },
+                }),
+                User.decrement("followingCount", { by: 1, where: { userId } }),
+            ]);
+
+            return res.status(200).json({ message: "Unfollow successful" });
+        } else {
+            // Instagram isteği beklenen formatta dönmediyse
+            console.warn("unfollow: instagram request returned unexpected body", response.data);
+            return res.status(400).json({ message: "Instagram request failed" });
+        }
+    } catch (error) {
+        const errorMessage = error?.response?.data || error.message || "Unexpected error";
+        console.error("❌ Unfollow error:", errorMessage);
+
+        // Hata durumunda kullanıcıyı pasif hale getir
+        try {
+            await User.update({ status: false }, { where: { userId } });
+        } catch (e) {
+            console.error("❌ Failed to set user status=false after error:", e?.message || e);
+        }
+
+        return res.status(500).json({ message: errorMessage });
+    }
+}
+
+async function refreshUser(req, res) {
+    const userId = req.userId;
+    try {
+        const user = await User.findOne({ where: { userId } });
+
+        if (!user || !user.sessionId) {
+            await User.update({ status: false }, { where: { userId } });
+            console.warn(`refreshUser: User not found or sessionId missing (userId=${userId})`);
+            return res.status(404).json({ message: "User not found or session invalid" });
+        }
+
+        const url = `https://i.instagram.com/api/v1/users/${userId}/info/`;
+
+        const headers = {
+            "User-Agent": user.userAgent,
+            "Cookie": `sessionid=${user.sessionId}; ds_user_id=${userId};`,
+        };
+
+        const { data } = await axios.get(url, { headers });
+
+        if (!data || !data.user) {
+            throw new Error("Invalid response from Instagram");
+        }
+
+        const igUser = data.user;
+
+        await User.update(
+            {
+                username: igUser.username,
+                profilePhoto: igUser.profile_pic_url,
+                followerCount: igUser.follower_count,
+                followingCount: igUser.following_count,
+                requestStatus: false,
+                fetchStatus: 'completed'
+            },
+            { where: { userId } }
+        );
+
+        return res.status(200).json({ message: "User data refreshed successfully" });
+
+    } catch (error) {
+        const errorMessage = error?.response?.data || error.message || "Unknown error";
+
+        console.error("❌ refreshUser error:", errorMessage);
+
+        // Kullanıcıyı pasif duruma al
+        try {
+            await User.update({ status: false }, { where: { userId } });
+        } catch (e) {
+            console.error("⚠️ Failed to set status=false for user after error:", e.message);
+        }
+
+        return res.status(500).json({ message: errorMessage });
+    }
+}
+
 async function fetchUserData(req, res) {
     await InstagramUser.destroy({ where: { ownerId: req.userId } });
     const user = await User.findOne({ where: { userId: req.userId } });
+    console.log("user güncellendi");
+
+    await User.update(
+        { fetchStatus: 'loading', requestCount: 0 },
+        { where: { userId: req.userId } }
+    );
     const userId = req.userId;
     const sessionId = user.sessionId;
-    if (user.requestStatus == false) {
+    const deviceId = user.deviceId;
+    const userAgent = user.userAgent;
+    if (user.requestStatus == false || user.fetchStatus == 'failed') {
         await fetchQueue.removeJobs(`${userId}-followers`);
         await fetchQueue.removeJobs(`${userId}-following`);
     }
     await fetchQueue.add(
-        { sessionId, userId, type: "followers" },
+        { sessionId, userId, type: "followers", deviceId, userAgent },
         { jobId: `${userId}-followers`, removeOnComplete: true, removeOnFail: true }
     );
-
-    console.log("geldi");
-
     await fetchQueue.add(
-        { sessionId, userId, type: "following" },
+        { sessionId, userId, type: "following", deviceId, userAgent },
         { jobId: `${userId}-following`, removeOnComplete: true, removeOnFail: true }
     );
-
-    console.log("geldi2");
-
     return res.json({ status: "queued", userId });
 }
 
-
-const fetchQueue = new Queue("fetchQueue", process.env.REDIS_URL || "redis://127.0.0.1:6379");
-
-function delay(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-// DEĞİŞTİ: 401 yönetimi eklendi
-async function fetchPage(sessionId, userId, type, endCursor) {
-    console.log("fetch page started");
-
-    const userAgents = [
-        "Instagram 293.0.0.36.101 Android",
-        "Instagram 289.0.0.77.109 Android",
-        "Instagram 250.0.0.21.109 iOS",
-        "Instagram 260.0.0.19.109 Android",
-        "Instagram 280.0.0.21.111 iOS"
-    ];
-    const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
-
+async function fetchPage(sessionId, userId, type, deviceId, userAgent, endCursor) {
     const queryHash = type === "followers"
         ? "c76146de99bb02f6415203be841dd25a"
         : "d04b0a864b4b54837c0d870b0e77e076";
@@ -218,67 +309,41 @@ async function fetchPage(sessionId, userId, type, endCursor) {
         id: userId.toString(),
         first: 50
     };
-    console.log(variables);
 
     if (endCursor) variables.after = endCursor;
-
-    console.log('endCursor ', endCursor);
-    console.log('variables ', variables);
 
     const url = `https://www.instagram.com/graphql/query/?query_hash=${queryHash}&variables=${encodeURIComponent(JSON.stringify(variables))}`;
 
     const headers = {
-        "User-Agent": randomUA,
+        "User-Agent": userAgent,
         "Cookie": `sessionid=${sessionId}; ds_user_id=${userId};`
     };
-
-    // YENİ: 401 hatası yakala ve kullanıcıyı pasif yap
     try {
-        const res = await axiosGetWithProxy(url, { headers }, userId);
+        const res = await axiosGetWithProxy(url, { headers }, userId, userAgent);
         return res.data;
     } catch (error) {
-        if (error.response?.status === 401) {
-            console.error(`401 Hatası (userId=${userId}): Session geçersiz`);
-
-            await User.update(
-                { status: false, requestStatus: false },
-                { where: { userId } }
-            );
-
-            throw new Error("SESSION_EXPIRED");
-        }
-
+        console.warn(`user fetch page error: ${error}`);
         throw error;
     }
 }
 
-let requestCounter = 0; // 🔢 Global sayaç
-
 fetchQueue.process(5, async (job) => {
-    const { sessionId, userId, type, endCursor } = job.data;
+    const { sessionId, userId, type, deviceId, userAgent, endCursor } = job.data;
     console.log(`🔥 İş başladı: userId=${userId}, type=${type}`);
 
     try {
-        const data = await fetchPage(sessionId, userId, type, endCursor);
-        console.log(`dataLog: ${data}`);
-        requestCounter++; // 🔼 Her başarılı fetch'ten sonra sayacı artır
-
-        // 🕒 Her 10 istekte bir 10 saniye bekle
-        if (requestCounter >= 5) {
-            console.log("⏱ 5 istek yapıldı. 10 saniye bekleniyor (rate limit önlemi)...");
-            await delay(10000);
-            requestCounter = 0; // 🔁 Sayaç sıfırla
-        }
-
+        await delay(2500);
+        const data = await fetchPage(sessionId, userId, type, deviceId, userAgent, endCursor);
         const edges = type === "followers"
-            ? data.data.user.edge_followed_by.edges
-            : data.data.user.edge_follow.edges;
+            ? data?.data?.user?.edge_followed_by?.edges
+            : data?.data?.user?.edge_follow?.edges;
 
         if (edges && edges.length > 0) {
             const rows = edges.map(({ node }) => ({
                 userId: node.id,
                 ownerId: userId,
                 username: node.username,
+                fullName: node.full_name,
                 profilePhoto: node.profile_pic_url,
                 isPrivate: node.is_private,
                 isVerified: node.is_verified,
@@ -289,116 +354,148 @@ fetchQueue.process(5, async (job) => {
                 await InstagramUser.bulkCreate(rows, { ignoreDuplicates: true });
                 console.log(`💾 ${rows.length} kişi kaydedildi (type=${type})`);
             } catch (dbErr) {
+                await User.update(
+                    { requestStatus: false, requestCount: 0, status: false, fetchStatus: 'failed' },
+                    { where: { userId } }
+                );
                 console.error("❌ DB Hatası:", dbErr.message);
             }
+        } else {
+            await User.update(
+                { requestStatus: false, requestCount: 0, status: false, fetchStatus: 'failed' },
+                { where: { userId } }
+            );
+            console.log("⚠️ edges boş geldi");
         }
-        console.log("data:", data);
-        const pageInfo = data?.data?.user?.edge_follow?.page_info
-            || data?.data?.user?.edge_followed_by?.page_info;
-        console.log("page_info:", pageInfo);
+
+        const pageInfo = data?.data?.user?.[type === "followers" ? "edge_followed_by" : "edge_follow"]?.page_info;
 
         if (pageInfo?.has_next_page && pageInfo?.end_cursor) {
             console.log(`➡️ ${type}: sıradaki sayfa kuyruğa alınıyor...`);
-            const endCursor = pageInfo.end_cursor;
-
             await fetchQueue.add(
-                { sessionId, userId, type, endCursor },
+                { sessionId, userId, type, deviceId, userAgent, endCursor: pageInfo.end_cursor },
                 { removeOnComplete: true }
             );
         } else {
-
-            const followers = await InstagramUser.findAll({
-                where: { ownerId: userId, sourceType: "followers" },
-                attributes: ["userId", "username", "isPrivate", "isVerified"],
-            });
-
-            const following = await InstagramUser.findAll({
-                where: { ownerId: userId, sourceType: "following" },
-                attributes: ["userId"],
-            });
-
-            const followerSet = new Set(followers.map(f => f.userId));
-            const followingSet = new Set(following.map(f => f.userId));
-
-            const notFollowingBack = following.filter(f => !followerSet.has(f.userId));
-            const notFollowingMe = followers.filter(f => !followingSet.has(f.userId));
-            const privateFollowers = followers.filter(f => f.isPrivate);
-            const verifiedFollowers = followers.filter(f => f.isVerified);
-
-            await User.increment("requestCount", { by: 1, where: { userId } });
-
-            const user = await User.findOne({ where: { userId } });
-
-            if (user.requestCount >= 2) {
-                let profileViewers = [];
-                if (followers.length > 0) {
-                    const shuffled = followers.sort(() => 0.5 - Math.random());
-
-                    let randomLimit = Math.floor(Math.random() * (16 - 4 + 1)) + 4;
-
-                    randomLimit = Math.min(randomLimit, shuffled.length);
-
-                    profileViewers = shuffled.slice(0, randomLimit);
-                    console.log(`🎲 seçilen limit=${randomLimit}, takipçi=${followers.length}, slice=${profileViewers.length}`);
-                }
-                await User.update(
-                    {
-                        requestCount: 0,
-                        requestStatus: true,
-                        notFollowingBackCount: notFollowingBack.length,
-                        notFollowingMeCount: notFollowingMe.length,
-                        privateFollowersCount: privateFollowers.length,
-                        verifiedFollowersCount: verifiedFollowers.length,
-                        profileViewersCount: profileViewers.length,
-                    },
-                    { where: { userId } }
-                );
-                console.log(`${type}: tüm liste tamamlandı!`);
-            }
+            console.log(`✅ ${type} için tüm sayfalar çekildi. Veriler işleniyor...`);
+            await processFinalData(userId);
         }
+
     } catch (error) {
-        // DEĞİŞTİ: SESSION_EXPIRED özel olarak ele alınıyor
-        if (error.message === "SESSION_EXPIRED") {
-            console.error(`userId=${userId} session expired, kullanıcı pasif`);
-            await User.update(
-                { requestStatus: false, requestCount: 0, status: false },
-                { where: { userId } }
-            );
-            return;
-        }
-
-        console.error("process Hata:", error.response?.data || error.message);
+        console.error("❌ process Hata:", error.response?.data || error.message);
         await User.update(
-            { requestStatus: false, requestCount: 0, status: false },
+            { requestStatus: false, requestCount: 0, status: false, fetchStatus: 'failed' },
             { where: { userId } }
         );
-        return;
     }
 });
 
+
+async function processFinalData(userId) {
+    try {
+        const followers = await InstagramUser.findAll({
+            where: { ownerId: userId, sourceType: "followers" },
+            attributes: ["userId", "username", "isPrivate", "isVerified"],
+        });
+
+        const following = await InstagramUser.findAll({
+            where: { ownerId: userId, sourceType: "following" },
+            attributes: ["userId"],
+        });
+
+        const followerSet = new Set(followers.map(f => f.userId));
+        const followingSet = new Set(following.map(f => f.userId));
+
+        const notFollowingBack = following.filter(f => !followerSet.has(f.userId));
+        const notFollowingMe = followers.filter(f => !followingSet.has(f.userId));
+        const privateFollowers = followers.filter(f => f.isPrivate);
+        const verifiedFollowers = followers.filter(f => f.isVerified);
+
+        // Güncelleme yapılmadan önce requestCount kontrol edilecek
+        await User.increment("requestCount", { by: 1, where: { userId } });
+        const user = await User.findOne({ where: { userId } });
+
+        if (user.requestCount >= 2) {
+            console.log('requestCount artırıldı');
+
+            let profileViewers = [];
+
+            if (followers.length > 0) {
+                const shuffled = followers.sort(() => 0.5 - Math.random());
+                const randomLimit = Math.min(
+                    Math.floor(Math.random() * (16 - 4 + 1)) + 4,
+                    shuffled.length
+                );
+                profileViewers = shuffled.slice(0, randomLimit);
+                console.log(`🎲 ProfileViewers: ${randomLimit} kişi seçildi`);
+            }
+
+            await User.update(
+                {
+                    requestCount: 0,
+                    requestStatus: true,
+                    fetchStatus: 'completed',
+                    notFollowingBackCount: notFollowingBack.length,
+                    notFollowingMeCount: notFollowingMe.length,
+                    privateFollowersCount: privateFollowers.length,
+                    verifiedFollowersCount: verifiedFollowers.length,
+                    profileViewersCount: profileViewers.length,
+                },
+                { where: { userId } }
+            );
+            if (user.fcmToken != null) {
+                const message = {
+                    token: user.fcmToken,
+                    notification: { title: 'All Set! 🎉', body: 'We’ve successfully synced your Instagram account data.' },
+                    android: { priority: 'high' },
+                    apns: { headers: { 'apns-priority': '10' } },
+                };
+                return admin.messaging().send(message);
+            }
+            console.log(`✅ Kullanıcı verileri başarıyla güncellendi`);
+        } else {
+            console.log(`ℹ️ Şimdilik sadece requestCount artırıldı`);
+        }
+    } catch (error) {
+        console.error("❌ Final işlem hatası:", error.message);
+        await User.update(
+            { requestStatus: false, requestCount: 0, status: false, fetchStatus: 'failed' },
+            { where: { userId } }
+        );
+    }
+}
+
 async function getInstagramUsers(req, res) {
     const { type } = req.body;
+    const userId = req.userId;
     try {
-        console.log(type);
+        const handlers = {
+            notFollowingBack: getNotFollowingBack,
+            notFollowingMe: getNotFollowingMeBack,
+            privateFollowers: getPrivateFollowers,
+            verifiedFollowers: getVerifiedFollowers,
+            profileViewers: getProfileViewers,
+        };
+        const handlerFn = handlers[type];
 
-        var list;
-        if (type == 'notFollowingBack') {
-            list = await getNotFollowingBack(req.userId);
-        } else if (type == 'notFollowingMe') {
-            list = await getNotFollowingMeBack(req.userId);
-        } else if (type == 'privateFollowers') {
-            list = await getPrivateFollowers(req.userId);
-        } else if (type == 'verifiedFollowers') {
-            list = await getVerifiedFollowers(req.userId);
-        } else if (type == 'profileViewers') {
-            list = await getProfileViewers(req.userId);
+        if (!handlerFn) {
+            console.warn(`⚠️ Geçersiz type: ${type}`);
+            return res.status(400).json({ message: "Invalid type parameter" });
         }
-
+        const list = await handlerFn(userId);
         return res.status(200).json(list);
     } catch (error) {
-        await User.update({ status: false }, { where: { userId: req.userId } });
-        console.error("getInstagramUsers Hata:", error.response?.data || error.message);
-        return res.status(500).json({ message: error.response?.data || error.message });
+        console.error("❌ getInstagramUsers Hata:", error.response?.data || error.message);
+
+        try {
+            await User.update({ status: false }, { where: { userId } });
+        } catch (dbErr) {
+            console.error("⚠️ Kullanıcı status=false yapılırken hata:", dbErr.message);
+        }
+
+        return res.status(500).json({
+            message: error.response?.data || error.message || "Unknown error"
+        });
     }
 }
 
@@ -438,7 +535,6 @@ async function getPrivateFollowers(userId) {
             isPrivate: true
         },
     });
-
     return privateFollowers;
 }
 
@@ -450,14 +546,11 @@ async function getVerifiedFollowers(userId) {
             isVerified: true
         },
     });
-
     return verifiedFollowers;
 }
 
 async function getProfileViewers(userId) {
     const user = await User.findOne({ where: { userId } });
-    console.log(user.profileViewersCount);
-
     const viewers = await InstagramUser.findAll({
         where: { ownerId: userId, sourceType: "followers" },
         order: Sequelize.literal("RAND()"),
@@ -467,4 +560,4 @@ async function getProfileViewers(userId) {
 
 }
 
-module.exports = { getUser, createUser, fetchUserData, getInstagramUsers, unfollow, refreshUser, deleteAccount }
+module.exports = { getUser, createUser, fetchUserData, getInstagramUsers, unfollow, refreshUser, deleteAccount, saveToken }

@@ -1,8 +1,12 @@
 require('dotenv').config({ path: './config/.env' });
 const express = require('express');
 const app = express();
-const Queue = require("bull");
-const axios = require("axios");
+const admin = require('firebase-admin');
+const serviceAccount = require('./config/firebase-key.json');
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true }));

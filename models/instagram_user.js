@@ -4,11 +4,15 @@ const db = require("../config/database");
 InstagramUsers = db.define("instagram_users", {
     userId: {
         type: Sequelize.STRING,
-        allowNull: false,        
+        allowNull: false,
     },
     username: {
         type: Sequelize.STRING,
         allowNull: false,
+    },
+    fullName: {
+        type: Sequelize.STRING,
+        allowNull: true,
     },
     isVerified: {
         type: Sequelize.BOOLEAN,

@@ -7,6 +7,7 @@ router.post('/', controller.createUser);
 router.get('/all', userTokenVerify, controller.fetchUserData);
 router.post('/instagram', userTokenVerify, controller.getInstagramUsers);
 router.post('/unfollow', userTokenVerify, controller.unfollow);
+router.post('/saveToken', userTokenVerify, controller.saveToken);
 router.get('/refresh', userTokenVerify, controller.refreshUser);
 router.delete('/delete', userTokenVerify, controller.deleteAccount);
 
